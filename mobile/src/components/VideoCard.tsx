@@ -25,45 +25,74 @@ export const VideoCard: React.FC<VideoCardProps> = ({
   onSwipe,
   isActive,
 }) => {
-
- 
-
-  
-  const testUrl = 'https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/BigBuckBunny.mp4';
-   console.log('FÖRSÖKER LADDA TEST-VIDEO:', testUrl);
-  
-   
-  
-  console.log('--- STEG 3: VideoCard mottog URL ---');
-  console.log('URL som skickas till useVideoPlayer:', profile.videoURL);
-  console.log('Är kortet aktivt?', isActive);
-  
   const [isLoading, setIsLoading] = useState(true);
+  const [isReady, setIsReady] = useState(false);
+  const [hasError, setHasError] = useState(false);
   const fadeAnim = new Animated.Value(0);
   
-  // Skapa video player
-  const player = useVideoPlayer(testUrl, (player) => {
+  // VIKTIGT: Använd faktisk video URL, inte test URL
+  const videoUrl = profile.videoURL || '';
+  
+  console.log('VideoCard: Loading video from:', videoUrl);
+  
+  // Skapa video player med bättre felhantering
+  const player = useVideoPlayer(videoUrl, (player) => {
     player.loop = true;
     player.muted = false;
     player.volume = 0.5;
-    if (isActive) {
-      player.play();
-    }
+    // Vänta med att spela tills videon är redo
+    player.pause();
   });
 
+  // Lyssna på video status
   useEffect(() => {
-    // Pausa/spela baserat på om kortet är aktivt
-    if (isActive) {
-      player.play();
-      Animated.timing(fadeAnim, {
-        toValue: 1,
-        duration: 300,
-        useNativeDriver: true,
-      }).start();
-    } else {
-      player.pause();
+    const statusSubscription = player.addListener('statusChange', (event) => {
+      console.log('Video status changed:', event.status);
+      
+      if (event.status === 'readyToPlay') {
+        setIsReady(true);
+        setIsLoading(false);
+        setHasError(false);
+        
+        // Spela bara om kortet är aktivt
+        if (isActive) {
+          player.play();
+        }
+      } else if (event.status === 'error') {
+        console.error('Video error:', event.error);
+        setHasError(true);
+        setIsLoading(false);
+      }
+    });
+
+    // Lyssna på när första frame renderas
+    const loadSubscription = player.addListener('sourceChange', () => {
+      console.log('Video source changed');
+      setIsLoading(true);
+      setIsReady(false);
+    });
+
+    return () => {
+      statusSubscription.remove();
+      loadSubscription.remove();
+    };
+  }, [player, isActive]);
+
+  // Hantera aktiv/inaktiv status
+  useEffect(() => {
+    if (isReady) {
+      if (isActive) {
+        player.play();
+        Animated.timing(fadeAnim, {
+          toValue: 1,
+          duration: 300,
+          useNativeDriver: true,
+        }).start();
+      } else {
+        player.pause();
+      }
     }
-  }, [isActive, player]);
+  }, [isActive, isReady, player, fadeAnim]);
 
   // Cleanup
   useEffect(() => {
@@ -71,10 +100,6 @@ export const VideoCard: React.FC<VideoCardProps> = ({
       player.release();
     };
   }, [player]);
-
-  const handleVideoLoad = () => {
-    setIsLoading(false);
-  };
 
   const formatInfo = () => {
     const parts = [];
@@ -100,22 +125,36 @@ export const VideoCard: React.FC<VideoCardProps> = ({
       ]}
     >
       {/* Video Background */}
-     <VideoView
-        style={styles.video}
-        player={player}
-        nativeControls={false}
-        contentFit="cover"
-        onFirstFrameRender={handleVideoLoad}
-      />
+      {!hasError && (
+        <VideoView
+          style={[
+            styles.video,
+            // Dölj videon tills den är redo att spelas
+            !isReady && styles.hiddenVideo
+          ]}
+          player={player}
+          nativeControls={false}
+          contentFit="cover"
+        />
+      )}
+      
+      {/* Error state */}
+      {hasError && (
+        <View style={styles.errorContainer}>
+          <Ionicons name="alert-circle" size={50} color="#fff" />
+          <Text style={styles.errorText}>Kunde inte ladda videon</Text>
+        </View>
+      )}
  
-      {/* Loading Indicator */}
-      {isLoading && (
+      {/* Loading Indicator - visa medan videon inte är redo */}
+      {(isLoading || !isReady) && !hasError && (
         <View style={styles.loadingContainer}>
           <ActivityIndicator size="large" color="#fff" />
+          <Text style={styles.loadingText}>Laddar video...</Text>
         </View>
       )}
 
-      {/* Gradient Alternative - Using View with opacity */}
+      {/* Gradient Alternative */}
       <View style={styles.gradientAlternative} />
 
       {/* User Info */}
@@ -130,19 +169,21 @@ export const VideoCard: React.FC<VideoCardProps> = ({
         )}
       </View>
 
-      {/* Volume Control */}
-      <TouchableOpacity 
-        style={styles.volumeButton}
-        onPress={() => {
-          player.muted = !player.muted;
-        }}
-      >
-        <Ionicons 
-          name={player.muted ? "volume-mute" : "volume-high"} 
-          size={24} 
-          color="#fff" 
-        />
-      </TouchableOpacity>
+      {/* Volume Control - visa bara om videon är redo */}
+      {isReady && (
+        <TouchableOpacity 
+          style={styles.volumeButton}
+          onPress={() => {
+            player.muted = !player.muted;
+          }}
+        >
+          <Ionicons 
+            name={player.muted ? "volume-mute" : "volume-high"} 
+            size={24} 
+            color="#fff" 
+          />
+        </TouchableOpacity>
+      )}
 
       {/* Action Buttons */}
       <View style={styles.actionContainer}>
@@ -183,11 +224,13 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: '#000',
   },
- video: {
-  ...StyleSheet.absoluteFillObject, // Denna rad ersätter top/left/right/bottom/position
-  zIndex: 1, // Behåll zIndex
-  backgroundColor: 'red',
-},
+  video: {
+    ...StyleSheet.absoluteFillObject,
+    zIndex: 1,
+  },
+  hiddenVideo: {
+    opacity: 0,
+  },
   loadingContainer: {
     position: 'absolute',
     top: 0,
@@ -196,8 +239,29 @@ const styles = StyleSheet.create({
     bottom: 0,
     justifyContent: 'center',
     alignItems: 'center',
-    backgroundColor: 'rgba(0,0,0,0.5)',
-    zIndex:3,
+    backgroundColor: '#000',
+    zIndex: 3,
+  },
+  loadingText: {
+    color: '#fff',
+    marginTop: 10,
+    fontSize: 14,
+  },
+  errorContainer: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    justifyContent: 'center',
+    alignItems: 'center',
+    backgroundColor: '#000',
+    zIndex: 3,
+  },
+  errorText: {
+    color: '#fff',
+    marginTop: 10,
+    fontSize: 16,
   },
   gradientAlternative: {
     position: 'absolute',
@@ -210,7 +274,6 @@ const styles = StyleSheet.create({
     shadowOffset: {
       width: 0,
       height: -50,
-      
     },
     shadowOpacity: 0.8,
     shadowRadius: 50,
@@ -222,7 +285,6 @@ const styles = StyleSheet.create({
     bottom: 120,
     left: 20,
     right: 20,
-    // Lägg till bakgrund för bättre läsbarhet
     backgroundColor: 'rgba(0,0,0,0.5)',
     padding: 15,
     borderRadius: 10,

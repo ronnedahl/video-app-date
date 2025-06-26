@@ -4,9 +4,10 @@ import {
   StyleSheet,
   Dimensions,
   TouchableOpacity,
+  Text,
+  ActivityIndicator,
 } from 'react-native';
 import { VideoView } from 'expo-video';
-import { useEvent } from 'expo';
 import { Ionicons } from '@expo/vector-icons';
 import { VideoMetadata } from '../types/video';
 import { useVideoPlayback } from '../hooks/useVideoPlayback';
@@ -38,6 +39,21 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({
   const [hasPlayedOnce, setHasPlayedOnce] = useState(false);
   const [videoEnded, setVideoEnded] = useState(false);
   
+  // Validera video URI
+  if (!videoUri) {
+    return (
+      <View style={styles.errorContainer}>
+        <Ionicons name="alert-circle" size={50} color="#fff" />
+        <Text style={styles.errorText}>Ingen video att visa</Text>
+        {onClose && (
+          <TouchableOpacity style={styles.errorButton} onPress={onClose}>
+            <Text style={styles.errorButtonText}>Stäng</Text>
+          </TouchableOpacity>
+        )}
+      </View>
+    );
+  }
+  
   const metadata: VideoMetadata = {
     uri: videoUri,
     duration: 20,
@@ -51,12 +67,16 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({
     currentQuestion,
     togglePlayPause,
     seekTo,
+    isReady,
+    hasError,
   } = useVideoPlayback(metadata);
 
   // Sätt loop baserat på om vi ska visa modal
   useEffect(() => {
-    player.loop = !showModalOnComplete;
-  }, [player, showModalOnComplete]);
+    if (isReady) {
+      player.loop = !showModalOnComplete;
+    }
+  }, [player, showModalOnComplete, isReady]);
 
   // Lyssna på när videon når slutet
   useEffect(() => {
@@ -80,13 +100,14 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({
   }, [playbackState.currentTime, hasPlayedOnce]);
 
   const handleVideoPress = () => {
-    setShowControls(!showControls);
+    if (isReady) {
+      setShowControls(!showControls);
+    }
   };
 
   // Modal handlers
   const handleModalClose = () => {
     setShowCompleteModal(false);
-    // Starta om videon om användaren stänger modalen
     if (videoEnded) {
       player.replay();
       setVideoEnded(false);
@@ -103,6 +124,22 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({
     onCreateProfile?.();
   };
 
+  // Visa fel om videon inte kan laddas
+  if (hasError) {
+    return (
+      <View style={styles.errorContainer}>
+        <Ionicons name="alert-circle" size={50} color="#fff" />
+        <Text style={styles.errorText}>Kunde inte ladda videon</Text>
+        <Text style={styles.errorSubtext}>Kontrollera din internetanslutning</Text>
+        {onClose && (
+          <TouchableOpacity style={styles.errorButton} onPress={onClose}>
+            <Text style={styles.errorButtonText}>Stäng</Text>
+          </TouchableOpacity>
+        )}
+      </View>
+    );
+  }
+
   return (
     <View style={styles.container}>
       <TouchableOpacity
@@ -110,31 +147,48 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({
         style={styles.videoContainer}
         onPress={handleVideoPress}
       >
+        {/* Video - dölj tills den är redo */}
         <VideoView 
-          style={styles.video}
+          style={[
+            styles.video,
+            !isReady && styles.hiddenVideo
+          ]}
           player={player}
           nativeControls={false}
           contentFit="contain"
         />
         
-        {/* Frågevisning */}
-        <QuestionOverlay
-          question={currentQuestion}
-          questionIndex={playbackState.currentQuestionIndex}
-          totalQuestions={questions.length}
-          isVisible={true}
-        />
+        {/* Loading indicator */}
+        {!isReady && (
+          <View style={styles.loadingContainer}>
+            <ActivityIndicator size="large" color="#fff" />
+            <Text style={styles.loadingText}>Laddar video...</Text>
+          </View>
+        )}
+        
+        {/* Visa bara UI element när videon är redo */}
+        {isReady && (
+          <>
+            {/* Frågevisning */}
+            <QuestionOverlay
+              question={currentQuestion}
+              questionIndex={playbackState.currentQuestionIndex}
+              totalQuestions={questions.length}
+              isVisible={true}
+            />
 
-        {/* Videokontroller */}
-        {showControls && (
-          <VideoControls
-            playbackState={playbackState}
-            onPlayPause={togglePlayPause}
-            onSeek={seekTo}
-          />
+            {/* Videokontroller */}
+            {showControls && (
+              <VideoControls
+                playbackState={playbackState}
+                onPlayPause={togglePlayPause}
+                onSeek={seekTo}
+              />
+            )}
+          </>
         )}
 
-        {/* Stäng-knapp */}
+        {/* Stäng-knapp - visa alltid */}
         {onClose && (
           <TouchableOpacity
             style={styles.closeButton}
@@ -169,6 +223,55 @@ const styles = StyleSheet.create({
   video: {
     width: screenWidth,
     height: screenHeight,
+  },
+  hiddenVideo: {
+    opacity: 0,
+  },
+  loadingContainer: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    justifyContent: 'center',
+    alignItems: 'center',
+    backgroundColor: '#000',
+  },
+  loadingText: {
+    color: '#fff',
+    marginTop: 10,
+    fontSize: 14,
+  },
+  errorContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    backgroundColor: '#000',
+    padding: 20,
+  },
+  errorText: {
+    color: '#fff',
+    fontSize: 18,
+    marginTop: 10,
+    textAlign: 'center',
+  },
+  errorSubtext: {
+    color: '#999',
+    fontSize: 14,
+    marginTop: 5,
+    textAlign: 'center',
+  },
+  errorButton: {
+    marginTop: 20,
+    paddingHorizontal: 30,
+    paddingVertical: 12,
+    backgroundColor: '#FF4458',
+    borderRadius: 25,
+  },
+  errorButtonText: {
+    color: '#fff',
+    fontSize: 16,
+    fontWeight: 'bold',
   },
   closeButton: {
     position: 'absolute',
