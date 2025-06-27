@@ -21,7 +21,7 @@ import { useVideoDownload } from './src/hooks/useVideoDownload';
 import { useAuthStore } from './src/stores/authStore';
 import { VideoGallery } from './src/components/VideoGallery';
 import { VideoItem } from './src/types/gallery';
-import { CreateProfileScreen } from './src/components/CreateProfileScreen';
+import { CreateProfileScreen } from './src/components/CreateProfile/CreateProfileScreen';
 import { DatingScreen } from './src/components/DatingScreen';
 import { ProfileViewScreen } from './src/components/ProfileViewScreen';
 import { BottomNavigation } from './src/components/BottomNavigation';

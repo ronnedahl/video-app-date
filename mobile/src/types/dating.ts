@@ -3,7 +3,7 @@ export interface DatingProfile {
   email: string;
   name?: string;
   gender?: string;
-  age?: string;
+  age?: number;
   location?: string;
   occupation?: string;
   interests?: string;
