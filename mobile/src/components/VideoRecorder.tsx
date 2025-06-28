@@ -1,3 +1,5 @@
+// components/VideoRecorder.tsx
+
 import React, { useState, useEffect, useRef } from 'react';
 import {
   View,
@@ -12,11 +14,14 @@ import * as MediaLibrary from 'expo-media-library';
 import { useVideoRecorder } from '../hooks/useVideoRecorder';
 import { useQuestions } from '../hooks/useQuestions';
 import { QuestionDisplay } from './QuestionDisplay';
+import { VideoMetadataService } from '../services/VideoMetadataService';
+import { VideoMetadata } from '../types/videoMetadata.types';
+import { Ionicons } from '@expo/vector-icons';
 
 const { width: screenWidth } = Dimensions.get('window');
 
 interface VideoRecorderProps {
-  onVideoRecorded: (uri: string, questions: string[]) => void;
+  onVideoRecorded: (metadata: VideoMetadata) => void;
 }
 
 export const VideoRecorder: React.FC<VideoRecorderProps> = ({ onVideoRecorded }) => {
@@ -25,7 +30,8 @@ export const VideoRecorder: React.FC<VideoRecorderProps> = ({ onVideoRecorded })
   const [microphonePermission, requestMicrophonePermission] = useMicrophonePermissions();
   const [mediaLibraryPermission, setMediaLibraryPermission] = useState<boolean | null>(null);
   
-  // Använd useRef för att undvika re-renders
+  // Recording session tracking
+  const recordingStartTimeRef = useRef<number>(0);
   const shownQuestionsRef = useRef<string[]>([]);
   
   const {
@@ -41,12 +47,11 @@ export const VideoRecorder: React.FC<VideoRecorderProps> = ({ onVideoRecorded })
     currentQuestion,
     questionIndex,
     totalQuestions,
-    nextQuestion,
     resetQuestions,
     startAutoAdvance
   } = useQuestions();
 
-  // Hantera media library permissions
+  // Media library permissions
   useEffect(() => {
     (async () => {
       const mediaLibraryStatus = await MediaLibrary.requestPermissionsAsync();
@@ -54,31 +59,21 @@ export const VideoRecorder: React.FC<VideoRecorderProps> = ({ onVideoRecorded })
     })();
   }, []);
 
-  // Samla upp frågor som visas
+  // Track shown questions
   useEffect(() => {
-    if (isRecording && currentQuestion) {
-      if (!shownQuestionsRef.current.includes(currentQuestion)) {
-        shownQuestionsRef.current = [...shownQuestionsRef.current, currentQuestion];
-      }
+    if (isRecording && currentQuestion && !shownQuestionsRef.current.includes(currentQuestion)) {
+      shownQuestionsRef.current.push(currentQuestion);
     }
   }, [isRecording, currentQuestion]);
 
-  // Hantera när video är klar - FIXAD VERSION
-  // useEffect(() => {
-  //   if (recordedVideo) {
-  //     // Kopiera frågorna innan vi skickar dem
-  //     const questionsToSend = [...shownQuestionsRef.current];
-      
-  //     // Skicka både video URI och frågorna
-  //     onVideoRecorded(recordedVideo, questionsToSend);
-      
-  //     // Reset för nästa inspelning
-  //     shownQuestionsRef.current = [];
-  //     resetQuestions();
-  //   }
-  // }, [recordedVideo, onVideoRecorded, resetQuestions]); // Ta bort shownQuestions från dependencies
+  // Handle video completion
+  useEffect(() => {
+    if (recordedVideo) {
+      handleVideoComplete(recordedVideo);
+    }
+  }, [recordedVideo]);
 
-  // Starta automatisk växling av frågor när inspelning börjar
+  // Start auto-advance when recording starts
   useEffect(() => {
     if (isRecording) {
       const interval = startAutoAdvance();
@@ -86,23 +81,47 @@ export const VideoRecorder: React.FC<VideoRecorderProps> = ({ onVideoRecorded })
     }
   }, [isRecording, startAutoAdvance]);
 
+  const handleVideoComplete = async (videoUri: string) => {
+    try {
+      // Create metadata
+      const metadata = await VideoMetadataService.createVideoMetadata(
+        videoUri,
+        20, // Duration in seconds (you can get this from the actual video)
+        shownQuestionsRef.current,
+        recordingStartTimeRef.current
+      );
+
+      // Save metadata locally
+      await VideoMetadataService.saveMetadata(metadata);
+
+      // Notify parent component
+      onVideoRecorded(metadata);
+
+      // Reset for next recording
+      shownQuestionsRef.current = [];
+      resetQuestions();
+    } catch (error) {
+      console.error('Failed to create video metadata:', error);
+    }
+  };
+
   const requestAllPermissions = async () => {
     await requestCameraPermission();
     await requestMicrophonePermission();
   };
 
-  useEffect(() => {
-  (window as any).onVideoRecordingComplete = (uri: string) => {
-    const questions = shownQuestionsRef.current;
-    onVideoRecorded(uri, questions);
+  const handleStartRecording = () => {
+    // Reset and track session
     shownQuestionsRef.current = [];
+    recordingStartTimeRef.current = Date.now();
+    startRecording();
   };
-  
-  return () => {
-    (window as any).onVideoRecordingComplete = undefined;
-  };
-}, [onVideoRecorded]);
 
+  const toggleCamera = () => {
+    setFacing(current => (current === 'back' ? 'front' : 'back'));
+  };
+
+  // Permission screens
   if (!cameraPermission || !microphonePermission || mediaLibraryPermission === null) {
     return <View style={styles.container}><Text style={styles.message}>Laddar...</Text></View>;
   }
@@ -125,12 +144,6 @@ export const VideoRecorder: React.FC<VideoRecorderProps> = ({ onVideoRecorded })
     );
   }
 
-  const handleStartRecording = () => {
-    // Reset frågor innan ny inspelning
-    shownQuestionsRef.current = [];
-    startRecording();
-  };
-
   return (
     <View style={styles.container}>
       <View style={styles.cameraContainer}>
@@ -142,7 +155,7 @@ export const VideoRecorder: React.FC<VideoRecorderProps> = ({ onVideoRecorded })
           videoQuality="720p"
         />
         
-        {/* Frågedisplay */}
+        {/* Question Display */}
         <QuestionDisplay
           question={currentQuestion}
           questionIndex={questionIndex}
@@ -158,8 +171,19 @@ export const VideoRecorder: React.FC<VideoRecorderProps> = ({ onVideoRecorded })
             </View>
           </View>
         )}
+
+        {/* Camera toggle */}
+        {!isRecording && (
+          <TouchableOpacity
+            style={styles.cameraToggle}
+            onPress={toggleCamera}
+          >
+            <Ionicons name="camera-reverse" size={30} color="#fff" />
+          </TouchableOpacity>
+        )}
       </View>
 
+      {/* Recording controls */}
       <View style={styles.controls}>
         {!isRecording ? (
           <TouchableOpacity
@@ -177,6 +201,15 @@ export const VideoRecorder: React.FC<VideoRecorderProps> = ({ onVideoRecorded })
           </TouchableOpacity>
         )}
       </View>
+
+      {/* Info text */}
+      {!isRecording && (
+        <View style={styles.infoContainer}>
+          <Text style={styles.infoText}>
+            Svara på {totalQuestions} frågor • 20 sekunder
+          </Text>
+        </View>
+      )}
     </View>
   );
 };
@@ -225,6 +258,17 @@ const styles = StyleSheet.create({
     fontSize: 24,
     fontWeight: 'bold',
   },
+  cameraToggle: {
+    position: 'absolute',
+    top: 50,
+    right: 20,
+    width: 50,
+    height: 50,
+    borderRadius: 25,
+    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
   controls: {
     position: 'absolute',
     bottom: 50,
@@ -257,5 +301,17 @@ const styles = StyleSheet.create({
     width: 40,
     height: 40,
     backgroundColor: '#f00',
+  },
+  infoContainer: {
+    position: 'absolute',
+    bottom: 140,
+    left: 0,
+    right: 0,
+    alignItems: 'center',
+  },
+  infoText: {
+    color: '#fff',
+    fontSize: 14,
+    opacity: 0.8,
   },
 });

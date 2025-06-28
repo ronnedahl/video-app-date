@@ -57,7 +57,7 @@ export const VideoCompleteModal: React.FC<VideoCompleteModalProps> = ({
               </View>
               <Text style={styles.optionTitle}>Skapa profil</Text>
               <Text style={styles.optionDescription}>
-                Använd denna video för din profil
+                
               </Text>
               <View style={styles.arrowContainer}>
                 <Ionicons name="arrow-forward" size={20} color="#fff" />
@@ -75,7 +75,7 @@ export const VideoCompleteModal: React.FC<VideoCompleteModalProps> = ({
               </View>
               <Text style={styles.optionTitle}>Ny inspelning</Text>
               <Text style={styles.optionDescription}>
-                Spela in en annan video
+                
               </Text>
               <View style={styles.arrowContainer}>
                 <Ionicons name="arrow-forward" size={20} color="#fff" />

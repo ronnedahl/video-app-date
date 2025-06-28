@@ -10,7 +10,7 @@ import {
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useDatingStore } from '../stores/datingStore';
-import { VideoCard } from '../components/VideoCard';
+import { VideoCard } from '../components/videoCard/VideoCard';
 import { SwipeAction } from '../types/dating';
 
 interface DatingScreenProps {

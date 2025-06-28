@@ -21,7 +21,7 @@ import { useVideoDownload } from './src/hooks/useVideoDownload';
 import { useAuthStore } from './src/stores/authStore';
 import { VideoGallery } from './src/components/VideoGallery';
 import { VideoItem } from './src/types/gallery';
-import { CreateProfileScreen } from './src/components/CreateProfileScreen';
+import { CreateProfileScreen } from './src/components/CreateProfile/CreateProfileScreen';
 import { DatingScreen } from './src/components/DatingScreen';
 import { ProfileViewScreen } from './src/components/ProfileViewScreen';
 import { BottomNavigation } from './src/components/BottomNavigation';
@@ -55,21 +55,24 @@ export default function App() {
     }
   }, [isAuthenticated]);
 
-  const handleVideoRecorded = useCallback(async (uri: string, questions: string[]) => {
-    try {
-      setRecordedVideoUri(uri);
-      setRecordedQuestions(questions);
-
-      Alert.alert('Video inspelad', 'Laddar upp video...');
-      const result = await ApiService.uploadVideo(uri);
-      setVideoId(result.videoId);
-      setCurrentScreen('upload');
-    } catch (error) {
-      Alert.alert('Fel', 'Kunde inte ladda upp video');
-      console.error('Upload error:', error);
-    }
-  }, []);
-
+  const handleVideoRecorded = useCallback(async (metadata: any) => {
+  try {
+    // Extrahera uri och questions från metadata
+    const uri = metadata.uri;
+    const questions = metadata.questions.map((q: any) => q.text);
+    
+    // Din befintliga kod
+    setRecordedVideoUri(uri);
+    setRecordedQuestions(questions);
+    Alert.alert('Video inspelad', 'Laddar upp video...');
+    const result = await ApiService.uploadVideo(uri);
+    setVideoId(result.videoId);
+    setCurrentScreen('upload');
+  } catch (error) {
+    Alert.alert('Fel', 'Kunde inte ladda upp video');
+    console.error('Upload error:', error);
+  }
+}, []);
   const handleUploadComplete = () => {
     Alert.alert('Klart!', 'Video har komprimerats och sparats på servern');
     setCurrentScreen('complete');
